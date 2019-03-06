@@ -12,7 +12,7 @@ import scala.collection.mutable
   * This object provides utility methods to convert between
   * the Aerospike and park SQL types
   */
-class TypeConverter {
+class TypeConverter extends Serializable {
 
   def binNamesOnly(fieldNames:Array[String], metaFields:Set[String]): Array[String] = {
     fieldNames.toSet.diff(metaFields).toArray.sortWith(_ < _)
