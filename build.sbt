@@ -1,6 +1,6 @@
 organization := "com.aerospike"
 name         := "aerospike-spark"
-version      := "1.3.2"
+version      := "1.0.1"
 
 crossScalaVersions := Seq("2.10.6", "2.11.8", "2.12.0")
 
@@ -10,17 +10,17 @@ javacOptions ++= Seq("-source", "1.8", "-target", "1.8")
 
 parallelExecution in test := false
 
-val sparkVer = "2.1.1"
+val sparkVer = "2.3.0"
 libraryDependencies ++= Seq(
 	"org.apache.spark"				%% "spark-core"				% sparkVer % Provided,
 	"org.apache.spark" 				%% "spark-sql"				% sparkVer % Provided,
 	"org.apache.spark"				%% "spark-mllib"			% sparkVer % Provided,
 	"org.apache.spark"				%% "spark-streaming"		% sparkVer % Provided,
-	"com.ning"						% "async-http-client"		% "1.9.10",
-	"com.twitter"					% "util-core_2.11" 			% "6.42.0",
-	
-	"com.aerospike"					%  "aerospike-helper-java"	% "1.2",
-	"com.aerospike"					%  "aerospike-client"	% 	"3.3.4",
+	"com.ning"						    % "async-http-client"		% "1.9.10",
+  "com.twitter"					    % "util-core_2.11" 			% "6.34.0",
+
+  "com.aerospike"					%  "aerospike-helper-java"	% "1.2.3",
+	"com.aerospike"					%  "aerospike-client"	% 	"4.1.5" % Provided,
 	"com.typesafe.scala-logging"	%% "scala-logging-slf4j"	% "2.1.2",
 	"org.scalatest"					%% "scalatest"				% "2.2.1" % Test,
 	"com.github.docker-java" 		% "docker-java" 			% "3.0.8" % Test,
@@ -45,7 +45,7 @@ assemblyMergeStrategy in assembly := {
   case PathList("META-INF", "maven","org.slf4j","slf4j-api", "pom.xml") =>
     MergeStrategy.discard
   case PathList(ps @ _*) if ps.last endsWith "pom.properties" =>
-    MergeStrategy.discard  
+    MergeStrategy.discard
   case PathList("META-INF", xs @ _*) =>
     xs.map(_.toLowerCase) match {
       case ("manifest.mf" :: Nil) | ("index.list" :: Nil) | ("dependencies" :: Nil) =>

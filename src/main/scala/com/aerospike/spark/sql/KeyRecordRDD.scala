@@ -29,7 +29,8 @@ class KeyRecordRDD(
   val aerospikeConfig: AerospikeConfig,
   val schema: StructType = null,
   val requiredColumns: Array[String] = null,
-  val filters: Array[Filter] = null
+  val filters: Array[Filter] = null,
+  typeConverter: TypeConverter
   ) extends RDD[Row](sc, Seq.empty) with LazyLogging {
 
   override protected def getPartitions: Array[Partition] = {
@@ -52,10 +53,10 @@ class KeyRecordRDD(
     stmt.setNamespace(aerospikeConfig.namespace())
     stmt.setSetName(aerospikeConfig.set())
 
-    val metaFields = TypeConverter.metaFields(aerospikeConfig)
+    val metaFields = typeConverter.metaFields(aerospikeConfig)
 
     if (requiredColumns != null && requiredColumns.length > 0){
-      val binsOnly = TypeConverter.binNamesOnly(requiredColumns, metaFields)
+      val binsOnly = typeConverter.binNamesOnly(requiredColumns, metaFields)
       logDebug(s"Bin names: $binsOnly")
       stmt.setBinNames(binsOnly: _*)
     }
@@ -74,9 +75,9 @@ class KeyRecordRDD(
     context.addTaskCompletionListener(context => {
       kri.close()
     })
-    new RowIterator(kri, schema, aerospikeConfig, requiredColumns)
+    new RowIterator(kri, schema, aerospikeConfig, requiredColumns, typeConverter)
   }
-  
+
   override def getPreferredLocations(split: Partition): Seq[String] =
     Seq(split.asInstanceOf[AerospikePartition].host)
 
@@ -110,13 +111,13 @@ class KeyRecordRDD(
 
     case IsNotNull(attribute) =>
       new Qualifier(attribute, FilterOperation.NOTEQ, Value.getAsNull)
-      
+
     case And(left, right) =>
       new Qualifier(FilterOperation.AND, filterToQualifier(left), filterToQualifier(right))
 
     case Or(left, right) =>
       new Qualifier(FilterOperation.OR, filterToQualifier(left), filterToQualifier(right))
-          
+
     case _ =>
       logger.warn(s"Not matching filter: ${filter.toString}")
       null
@@ -139,7 +140,11 @@ class KeyRecordRDD(
   * This class implement a Spark SQL row iterator.
   * It is used to iterate through the Record/Result set from the Aerospike query
   */
-class RowIterator[Row] (val kri: KeyRecordIterator, schema: StructType, config: AerospikeConfig, requiredColumns: Array[String] = null)
+class RowIterator[Row] (val kri: KeyRecordIterator,
+                        schema: StructType,
+                        config: AerospikeConfig,
+                        requiredColumns: Array[String] = null,
+                        typeConverter: TypeConverter)
   extends Iterator[org.apache.spark.sql.Row] with LazyLogging {
 
 
@@ -172,7 +177,7 @@ class RowIterator[Row] (val kri: KeyRecordIterator, schema: StructType, config: 
         case x if x.equals(expirationName) => expiration
         case x if x.equals(generationName) => generation
         case x if x.equals(ttlName) => ttl
-        case _ => TypeConverter.binToValue(schema, (field, kr.record.bins.get(field)))
+        case _ => typeConverter.binToValue(schema, (field, kr.record.bins.get(field)))
       }
       logger.debug(s"$field = $value")
       value

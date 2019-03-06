@@ -10,7 +10,7 @@ import org.apache.spark.sql.RuntimeConfig
   * this class is a container for the properties used during the
   * the read and save functions
   */
-case class AerospikeConfig private(val properties: Map[String, Any]) extends Serializable {
+case class AerospikeConfig private(properties: Map[String, Any]) extends Serializable {
 
   def get(key: String): Any =
     properties.getOrElse(key.toLowerCase(), notFound(key))
@@ -107,13 +107,13 @@ object AerospikeConfig {
 
   val Port = "aerospike.port"
   defineProperty(Port, 3000)
-  
+
   val MaxThreadCount = "aerospike.maxthreadcount"
   defineProperty(MaxThreadCount, 1)
 
   val TimeOut = "aerospike.timeout"
   defineProperty(TimeOut, 1000)
-  
+
   val SocketTimeOut = "aerospike.sockettimeout"
   defineProperty(SocketTimeOut, 0)
 
@@ -139,7 +139,7 @@ object AerospikeConfig {
   defineProperty(UpdateByDigest, null)
 
   val SchemaScan = "aerospike.schema.scan"
-  defineProperty(SchemaScan, 100)
+  defineProperty(SchemaScan, 2000)
 
   val KeyColumn = "aerospike.keyColumn"
   defineProperty(KeyColumn, "__key")
@@ -158,7 +158,7 @@ object AerospikeConfig {
 
   val SaveMode = "aerospike.savemode"
   defineProperty(SaveMode, "ignore")
-  
+
   val BatchMax = "aerospike.batchMax"
   defineProperty(BatchMax, 500)
 
@@ -181,7 +181,7 @@ object AerospikeConfig {
   def apply(conf:SparkConf): AerospikeConfig = {
     newConfig(conf.getAll.toMap)
   }
-  
+
   def apply(conf:RuntimeConfig): AerospikeConfig = {
     newConfig(conf.getAll.toMap)
   }

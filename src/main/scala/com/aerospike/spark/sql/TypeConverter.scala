@@ -12,7 +12,7 @@ import scala.collection.mutable
   * This object provides utility methods to convert between
   * the Aerospike and park SQL types
   */
-object TypeConverter{
+class TypeConverter {
 
   def binNamesOnly(fieldNames:Array[String], metaFields:Set[String]): Array[String] = {
     fieldNames.toSet.diff(metaFields).toArray.sortWith(_ < _)
@@ -58,6 +58,7 @@ object TypeConverter{
           case DoubleType => new Bin(field, value.asInstanceOf[java.lang.Double])
           case FloatType => new Bin(field, value.asInstanceOf[java.lang.Double])
           case DateType => new Bin(field, value.asInstanceOf[java.sql.Date].getTime)
+          case BinaryType => new Bin(field, value.asInstanceOf[Array[Byte]])
           case NullType => Bin.asNull(field)
           case _: ArrayType =>
             value match {
@@ -74,7 +75,7 @@ object TypeConverter{
       }
   }
 
-  def valueToSchema(bin: (String, Object)): StructField = {
+  def valueToSchema(bin: (String, Any)): StructField = {
     val (binName, binVal) = bin
 
     binVal match {
@@ -89,9 +90,10 @@ object TypeConverter{
         val aValue = valueToSchema((binName, binVal.asInstanceOf[java.util.Map[Object, Object]].asScala.values.head))
         StructField(binName, new MapType(aKey.dataType, aValue.dataType, true), nullable = true)
       case _: java.util.List[Object] =>
-        val newValue = binVal.asInstanceOf[java.util.List[Object]].get(0)
-        val elementStructure = valueToSchema((binName, newValue))
-        StructField(binName, new ArrayType(elementStructure.dataType , true))
+        binVal.asInstanceOf[java.util.List[Object]].asScala.headOption.map { obj =>
+          val elementStructure = valueToSchema((binName, obj))
+          StructField(binName, new ArrayType(elementStructure.dataType, true))
+        }.getOrElse(StructField(binName, BinaryType, nullable = true))
       //case ParticleType.GEOJSON => StructField(binName, StringType, nullable = true) //TODO
       case Array => StructField(binName, BinaryType, nullable = true)
       case _ => StructField(binName, BinaryType, nullable = true)

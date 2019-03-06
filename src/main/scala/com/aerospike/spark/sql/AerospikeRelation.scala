@@ -17,7 +17,7 @@ import com.typesafe.scalalogging.slf4j.LazyLogging
  * This class infers the schema used by the DataFrame
  * and creates an instance of @see com.aerospike.spark.sql.KeyRecordRDD
  */
-class AerospikeRelation(config: AerospikeConfig, userSchema: StructType)(@transient val sqlContext: SQLContext)
+class AerospikeRelation(config: AerospikeConfig, userSchema: StructType, typeConverter: TypeConverter)(@transient val sqlContext: SQLContext)
     extends BaseRelation with TableScan with PrunedFilteredScan with LazyLogging with Serializable {
 
   Value.UseDoubleType = true
@@ -43,13 +43,15 @@ class AerospikeRelation(config: AerospikeConfig, userSchema: StructType)(@transi
         sample.flatMap { keyRecord =>
           keyRecord.record.bins.map {
             case (binName, binVal) =>
-              val field = TypeConverter.valueToSchema(binName -> binVal)
+              val field = typeConverter.valueToSchema(binName -> binVal)
               logger.debug(s"Schema - Bin:$binName, Value:$binVal, Field:$field")
               binName -> field
           }
         }.toMap
       } catch {
-        case e: Exception => Map.empty[String, StructField]
+        case e: Exception =>
+          throw e
+          //Map.empty[String, StructField]
       } finally {
         recordSet.close()
       }
@@ -59,14 +61,14 @@ class AerospikeRelation(config: AerospikeConfig, userSchema: StructType)(@transi
   }
 
   override def buildScan(): RDD[Row] = {
-    new KeyRecordRDD(sqlContext.sparkContext, config, schemaCache)
+    new KeyRecordRDD(sqlContext.sparkContext, config, schemaCache, typeConverter = typeConverter)
   }
 
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     if (filters.length > 0) {
-      new KeyRecordRDD(sqlContext.sparkContext, config, schemaCache, requiredColumns, filters)
+      new KeyRecordRDD(sqlContext.sparkContext, config, schemaCache, requiredColumns, filters, typeConverter = typeConverter)
     } else {
-      new KeyRecordRDD(sqlContext.sparkContext, config, schemaCache, requiredColumns)
+      new KeyRecordRDD(sqlContext.sparkContext, config, schemaCache, requiredColumns, typeConverter = typeConverter)
     }
   }
 }

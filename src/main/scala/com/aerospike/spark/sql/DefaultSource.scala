@@ -29,12 +29,14 @@ import java.util.concurrent.TimeUnit
   */
 class DefaultSource extends RelationProvider with Serializable with LazyLogging with CreatableRelationProvider{
 
+  val typeConverter = new TypeConverter
+
   override def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation = {
     val configMap = parameters ++ sqlContext.getAllConfs.map{ case (k,v) => k -> ( parameters.getOrElse(k,v)) }
     configMap.getOrElse(AerospikeConfig.SeedHost, sys.error(AerospikeConfig.SeedHost + " must be specified"))
     configMap.getOrElse(AerospikeConfig.Port, sys.error(AerospikeConfig.Port + " must be specified"))
     configMap.getOrElse(AerospikeConfig.NameSpace, sys.error(AerospikeConfig.NameSpace + " must be specified"))
-    new AerospikeRelation(AerospikeConfig.newConfig(configMap), null)(sqlContext)
+    new AerospikeRelation(AerospikeConfig.newConfig(configMap), userSchema = null, typeConverter)(sqlContext)
   }
 
   override def createRelation(sqlContext: SQLContext, mode: SaveMode, parameters: Map[String, String], data: DataFrame): BaseRelation = {
@@ -53,7 +55,7 @@ class DefaultSource extends RelationProvider with Serializable with LazyLogging 
 
   private def savePartition(iterator: Iterator[Row],
     schema: StructType, mode: SaveMode, config: AerospikeConfig): Unit = {
-    
+
     val metaFields = Set(
       config.keyColumn(),
       config.digestColumn(),
@@ -78,7 +80,7 @@ class DefaultSource extends RelationProvider with Serializable with LazyLogging 
     logger.debug("creating write policy")
 
     val policy = new WritePolicy(client.writePolicyDefault)
-    policy.retryOnTimeout = true
+    //policy.retryOnTimeout = true  Leon set any value here
     mode match {
       case SaveMode.ErrorIfExists => policy.recordExistsAction = RecordExistsAction.CREATE_ONLY
       case SaveMode.Ignore => policy.recordExistsAction = RecordExistsAction.CREATE_ONLY
@@ -114,8 +116,8 @@ class DefaultSource extends RelationProvider with Serializable with LazyLogging 
           policy.expiration = row(expIndex).asInstanceOf[java.lang.Integer].intValue
         }
 
-        val bins = binsOnly.map(binName => TypeConverter.fieldToBin(schema, row, binName))
-        
+        val bins = binsOnly.map(binName => typeConverter.fieldToBin(schema, row, binName))
+
         tasks:+pool.submit(
           new Runnable {
             def run{
@@ -146,7 +148,7 @@ class DefaultSource extends RelationProvider with Serializable with LazyLogging 
 
             case SaveMode.Overwrite =>
               logger.error(s"Key:$key Error:$message")
-              //throw ex
+              throw ex
 
             case SaveMode.Append =>
               ex.getResultCode match {
@@ -158,10 +160,10 @@ class DefaultSource extends RelationProvider with Serializable with LazyLogging 
               }
           }
       }
-      
+
     }
     pool.shutdown()
-    pool.awaitTermination(Long.MaxValue, TimeUnit.NANOSECONDS);
+    pool.awaitTermination(Long.MaxValue, TimeUnit.NANOSECONDS)
     for(r <-tasks){
       r.onComplete {
         case Success(v) => None
