@@ -4,7 +4,7 @@ import org.apache.spark._
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.sources.{EqualTo, Filter, GreaterThan, GreaterThanOrEqual, IsNotNull, LessThan, LessThanOrEqual, StringEndsWith, StringStartsWith, And, Or}
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import com.aerospike.client.Value
 import com.aerospike.client.query.Statement
@@ -48,7 +48,6 @@ class KeyRecordRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[Row] = {
     val partition: AerospikePartition = split.asInstanceOf[AerospikePartition]
-    val partHost = partition.host
     val stmt = new Statement()
     stmt.setNamespace(aerospikeConfig.namespace())
     stmt.setSetName(aerospikeConfig.set())
@@ -72,7 +71,7 @@ class KeyRecordRDD(
       queryEngine.select(stmt, false, node)
     }
 
-    context.addTaskCompletionListener(context => {
+    context.addTaskCompletionListener(_ => {
       kri.close()
     })
     new RowIterator(kri, schema, aerospikeConfig, requiredColumns, typeConverter)
