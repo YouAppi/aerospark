@@ -37,39 +37,38 @@ class KeyRecordRDD(
   override protected def getPartitions: Array[Partition] = {
     val client = AerospikeConnection.getClient(aerospikeConfig)
     val nodes = client.getNodes
-    var count = 0
-    val parts = new Array[Partition](nodes.size)
-    nodes.foreach { node =>
+
+    nodes.zipWithIndex.map { case (node, i) =>
       val name = node.getName
-      parts(count) = AerospikePartition(count, name).asInstanceOf[Partition]
-      count += 1
+      AerospikePartition(i, name).asInstanceOf[Partition]
     }
-    parts
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[Row] = {
+
     val partition: AerospikePartition = split.asInstanceOf[AerospikePartition]
+    val queryEngine = AerospikeConnection.getQueryEngine(aerospikeConfig)
+    val client = AerospikeConnection.getClient(aerospikeConfig)
+    val node = client.getNode(partition.host)
+
     val stmt = new Statement()
     stmt.setNamespace(aerospikeConfig.namespace())
     stmt.setSetName(aerospikeConfig.set())
     val metaFields = typeConverter.metaFields(aerospikeConfig)
 
-    if (requiredColumns != null && requiredColumns.length > 0) {
-      val binsOnly = typeConverter.binNamesOnly(requiredColumns, metaFields)
-      logDebug(s"Bin names: $binsOnly")
-      stmt.setBinNames(binsOnly: _*)
-    }
 
-    val queryEngine = AerospikeConnection.getQueryEngine(aerospikeConfig)
-    val client = AerospikeConnection.getClient(aerospikeConfig)
-    val node = client.getNode(partition.host)
+    // set required bins
+    Option(requiredColumns)
+      .collect { case cols if cols.nonEmpty => typeConverter.binNamesOnly(cols, metaFields) }
+      .foreach { binsOnly =>
+        logDebug(s"Bin names: $binsOnly")
+        stmt.setBinNames(binsOnly: _*)
+      }
 
-    val kri = if (filters != null && filters.length > 0) {
-      val qualifiers = filters.map { phil => filterToQualifier(phil) }
-      queryEngine.select(stmt, false, node, qualifiers: _*)
-    } else {
-      queryEngine.select(stmt, false, node)
-    }
+    val kri: KeyRecordIterator = Option(filters).collect { case fs if fs.nonEmpty => fs.map(filterToQualifier) }
+      .map { qs =>
+        queryEngine.select(stmt, false, node, qs: _*)
+      }.getOrElse(queryEngine.select(stmt, false, node))
 
     context.addTaskCompletionListener(_ => {
       kri.close()
@@ -84,9 +83,9 @@ class KeyRecordRDD(
   private def filterToQualifier(filter: Filter): Qualifier = filter match {
     case EqualTo(attribute, value) =>
       if (isList(attribute)) {
-        QualifierFactory.create(attribute, FilterOperation.LIST_CONTAINS, value) // TODO experimental
+        QualifierFactory.create(attribute, FilterOperation.LIST_CONTAINS, value)
       } else if (isMap(attribute)) {
-        QualifierFactory.create(attribute, FilterOperation.MAP_KEYS_CONTAINS, value) //TODO experimental
+        QualifierFactory.create(attribute, FilterOperation.MAP_KEYS_CONTAINS, value)
       } else {
         QualifierFactory.create(attribute, FilterOperation.EQ, value)
       }
