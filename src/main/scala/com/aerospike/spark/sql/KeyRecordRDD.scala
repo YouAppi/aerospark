@@ -1,5 +1,6 @@
 package com.aerospike.spark.sql
 
+
 import org.apache.spark._
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -25,13 +26,13 @@ case class AerospikePartition(index: Int, host: String) extends Partition
   *
   */
 class KeyRecordRDD(
-  @transient val sc: SparkContext,
-  val aerospikeConfig: AerospikeConfig,
-  val schema: StructType = null,
-  val requiredColumns: Array[String] = null,
-  val filters: Array[Filter] = null,
-  typeConverter: TypeConverter
-  ) extends RDD[Row](sc, Seq.empty) with LazyLogging {
+                    @transient val sc: SparkContext,
+                    val aerospikeConfig: AerospikeConfig,
+                    val schema: StructType = null,
+                    val requiredColumns: Array[String] = null,
+                    val filters: Array[Filter] = null,
+                    typeConverter: TypeConverter
+                  ) extends RDD[Row](sc, Seq.empty) with LazyLogging {
 
   override protected def getPartitions: Array[Partition] = {
     val client = AerospikeConnection.getClient(aerospikeConfig)
@@ -51,10 +52,9 @@ class KeyRecordRDD(
     val stmt = new Statement()
     stmt.setNamespace(aerospikeConfig.namespace())
     stmt.setSetName(aerospikeConfig.set())
-
     val metaFields = typeConverter.metaFields(aerospikeConfig)
 
-    if (requiredColumns != null && requiredColumns.length > 0){
+    if (requiredColumns != null && requiredColumns.length > 0) {
       val binsOnly = typeConverter.binNamesOnly(requiredColumns, metaFields)
       logDebug(s"Bin names: $binsOnly")
       stmt.setBinNames(binsOnly: _*)
@@ -64,7 +64,7 @@ class KeyRecordRDD(
     val client = AerospikeConnection.getClient(aerospikeConfig)
     val node = client.getNode(partition.host)
 
-    val kri = if (filters != null && filters.length > 0){
+    val kri = if (filters != null && filters.length > 0) {
       val qualifiers = filters.map { phil => filterToQualifier(phil) }
       queryEngine.select(stmt, false, node, qualifiers: _*)
     } else {
@@ -81,35 +81,35 @@ class KeyRecordRDD(
     Seq(split.asInstanceOf[AerospikePartition].host)
 
 
-  private def filterToQualifier(filter: Filter):Qualifier = filter match {
+  private def filterToQualifier(filter: Filter): Qualifier = filter match {
     case EqualTo(attribute, value) =>
-      if (isList(attribute)){
-        new Qualifier(attribute, FilterOperation.LIST_CONTAINS, Value.get(value))  // TODO experimental
-      } else if (isMap(attribute)){
-        new Qualifier(attribute, FilterOperation.MAP_KEYS_CONTAINS, Value.get(value)) //TODO experimental
+      if (isList(attribute)) {
+        QualifierFactory.create(attribute, FilterOperation.LIST_CONTAINS, value) // TODO experimental
+      } else if (isMap(attribute)) {
+        QualifierFactory.create(attribute, FilterOperation.MAP_KEYS_CONTAINS, value) //TODO experimental
       } else {
-        new Qualifier(attribute, FilterOperation.EQ, Value.get(value))
+        QualifierFactory.create(attribute, FilterOperation.EQ, value)
       }
     case GreaterThanOrEqual(attribute, value) =>
-      new Qualifier(attribute, FilterOperation.GTEQ, Value.get(value))
+      QualifierFactory.create(attribute, FilterOperation.GTEQ, value)
 
     case GreaterThan(attribute, value) =>
-      new Qualifier(attribute, FilterOperation.GT, Value.get(value))
+      QualifierFactory.create(attribute, FilterOperation.GT, value)
 
     case LessThanOrEqual(attribute, value) =>
-      new Qualifier(attribute, FilterOperation.LTEQ, Value.get(value))
+      QualifierFactory.create(attribute, FilterOperation.LTEQ, value)
 
     case LessThan(attribute, value) =>
-      new Qualifier(attribute, FilterOperation.LT, Value.get(value))
+      QualifierFactory.create(attribute, FilterOperation.LT, value)
 
     case StringStartsWith(attribute, value) =>
-      new Qualifier(attribute, FilterOperation.START_WITH, Value.get(value))
+      QualifierFactory.create(attribute, FilterOperation.START_WITH, value)
 
     case StringEndsWith(attribute, value) =>
-      new Qualifier(attribute, FilterOperation.ENDS_WITH, Value.get(value))
+      QualifierFactory.create(attribute, FilterOperation.ENDS_WITH, value)
 
     case IsNotNull(attribute) =>
-      new Qualifier(attribute, FilterOperation.NOTEQ, Value.getAsNull)
+      QualifierFactory.create(attribute, FilterOperation.NOTEQ, Value.getAsNull)
 
     case And(left, right) =>
       new Qualifier(FilterOperation.AND, filterToQualifier(left), filterToQualifier(right))
@@ -128,6 +128,7 @@ class KeyRecordRDD(
       case _ => false
     }
   }
+
   private def isList(attribute: String) = {
     schema(attribute).dataType match {
       case _: ArrayType => true
@@ -135,15 +136,16 @@ class KeyRecordRDD(
     }
   }
 }
+
 /**
   * This class implement a Spark SQL row iterator.
   * It is used to iterate through the Record/Result set from the Aerospike query
   */
-class RowIterator[Row] (val kri: KeyRecordIterator,
-                        schema: StructType,
-                        config: AerospikeConfig,
-                        requiredColumns: Array[String] = null,
-                        typeConverter: TypeConverter)
+class RowIterator[Row](val kri: KeyRecordIterator,
+                       schema: StructType,
+                       config: AerospikeConfig,
+                       requiredColumns: Array[String] = null,
+                       typeConverter: TypeConverter)
   extends Iterator[org.apache.spark.sql.Row] with LazyLogging {
 
 
@@ -153,7 +155,6 @@ class RowIterator[Row] (val kri: KeyRecordIterator,
 
   def next: org.apache.spark.sql.Row = {
     val kr = kri.next()
-
     val digest: Array[Byte] = kr.key.digest
     val digestName: String = config.digestColumn()
 
@@ -169,6 +170,9 @@ class RowIterator[Row] (val kri: KeyRecordIterator,
     val ttl: Int = kr.record.getTimeToLive
     val ttlName: String = config.ttlColumn()
 
+    val lut: Long = System.currentTimeMillis() / 1000 - (config.defaultTTL() * 24 * 60 * 60 - ttl)
+    val lutName: String = config.lutColumn()
+
     val fields = requiredColumns.map { field =>
       val value = field match {
         case x if x.equals(digestName) => digest
@@ -176,11 +180,13 @@ class RowIterator[Row] (val kri: KeyRecordIterator,
         case x if x.equals(expirationName) => expiration
         case x if x.equals(generationName) => generation
         case x if x.equals(ttlName) => ttl
+        case x if x.equals(lutName) => lut
         case _ => typeConverter.binToValue(schema, (field, kr.record.bins.get(field)))
       }
       logger.debug(s"$field = $value")
       value
     }
+
     Row.fromSeq(fields)
   }
 }

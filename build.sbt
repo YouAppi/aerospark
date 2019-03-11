@@ -16,9 +16,7 @@ libraryDependencies ++= Seq(
 	"org.apache.spark" 				%% "spark-sql"				% sparkVer % Provided,
 	"org.apache.spark"				%% "spark-mllib"			% sparkVer % Provided,
 	"org.apache.spark"				%% "spark-streaming"		% sparkVer % Provided,
-	"com.ning"						    % "async-http-client"		% "1.9.10",
   "com.twitter"					    % "util-core_2.11" 			% "6.34.0",
-
   "com.aerospike"					%  "aerospike-helper-java"	% "1.2.3",
 	"com.aerospike"					%  "aerospike-client"	% 	"4.1.5" % Provided,
 	"com.typesafe.scala-logging"	%% "scala-logging-slf4j"	% "2.1.2",

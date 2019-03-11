@@ -1,16 +1,16 @@
 package com.aerospike.spark.sql
 
-import scala.collection.immutable.Map
-import com.aerospike.client.policy.CommitLevel
-import com.aerospike.client.policy.GenerationPolicy
+import com.aerospike.client.policy.{CommitLevel, GenerationPolicy, Priority}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.RuntimeConfig
+
+import scala.collection.immutable.Map
 
 /**
   * this class is a container for the properties used during the
   * the read and save functions
   */
-case class AerospikeConfig private(properties: Map[String, Any]) extends Serializable {
+class AerospikeConfig private(val properties: Map[String, Any]) extends Serializable {
 
   def get(key: String): Any =
     properties.getOrElse(key.toLowerCase(), notFound(key))
@@ -41,8 +41,12 @@ case class AerospikeConfig private(properties: Map[String, Any]) extends Seriali
     get(AerospikeConfig.Port).asInstanceOf[Int]
   }
 
+  //what is this???
   def schemaScan(): Int = {
-    get(AerospikeConfig.SchemaScan).asInstanceOf[Int]
+    get(AerospikeConfig.SchemaScan) match {
+      case i: Int => i
+      case s: String => s.toInt
+    }
   }
 
   def timeOut(): Int = {
@@ -66,6 +70,18 @@ case class AerospikeConfig private(properties: Map[String, Any]) extends Seriali
 
   def ttlColumn(): String = {
     get(AerospikeConfig.TTLColumn).asInstanceOf[String]
+  }
+
+  def lutColumn(): String = {
+    get(AerospikeConfig.LUTColumn).asInstanceOf[String]
+  }
+
+  def defaultTTL() : Int = {
+    get(AerospikeConfig.DefaultTTL).asInstanceOf[Int]
+  }
+
+  def scanPriority() : Priority = {
+    Priority.valueOf(get(AerospikeConfig.ScanPriority).asInstanceOf[String])
   }
 
   override def toString: String = {
@@ -100,7 +116,9 @@ object AerospikeConfig {
     AerospikeConfig.ExpiryColumn -> "__expiry",
     AerospikeConfig.GenerationColumn -> "__generation",
     AerospikeConfig.TTLColumn -> "__ttl",
-    AerospikeConfig.SaveMode -> "ignore")
+    AerospikeConfig.LUTColumn -> "__lut",
+    AerospikeConfig.DefaultTTL -> 60,
+    AerospikeConfig.ScanPriority -> "DEFAULT")
 
   val SeedHost = "aerospike.seedhost"
   defineProperty(SeedHost, "127.0.0.1")
@@ -162,28 +180,37 @@ object AerospikeConfig {
   val BatchMax = "aerospike.batchMax"
   defineProperty(BatchMax, 500)
 
-  private def defineProperty(key: String, defaultValue: Any) : Unit = {
+  val LUTColumn = "aerospike.lutColumn"
+  defineProperty(LUTColumn, "__lut")
+
+  val DefaultTTL = "aerospike.defaultTTL"
+  defineProperty(DefaultTTL, 60)
+
+  val ScanPriority = "aerospike.scanPriority"
+  defineProperty(ScanPriority, "DEFAULT")
+
+  private def defineProperty(key: String, defaultValue: Any): Unit = {
     val lowerKey = key.toLowerCase()
-    if(defaultValues.contains(lowerKey))
+    if (defaultValues.contains(lowerKey))
       sys.error(s"Config property already defined for key : $key")
     else
       defaultValues.put(lowerKey, defaultValue)
   }
 
-  def apply(seedHost:String, port: Int, timeOut:Any ): AerospikeConfig = {
+  def apply(seedHost: String, port: Int, timeOut: Any): AerospikeConfig = {
     newConfig(Map(
-        AerospikeConfig.SeedHost -> seedHost,
-        AerospikeConfig.Port -> port,
-        AerospikeConfig.TimeOut -> timeOut
+      AerospikeConfig.SeedHost -> seedHost,
+      AerospikeConfig.Port -> port,
+      AerospikeConfig.TimeOut -> timeOut
     ))
   }
 
-  def apply(conf:SparkConf): AerospikeConfig = {
+  def apply(conf: SparkConf): AerospikeConfig = {
     newConfig(conf.getAll.toMap)
   }
 
-  def apply(conf:RuntimeConfig): AerospikeConfig = {
-    newConfig(conf.getAll.toMap)
+  def apply(conf: RuntimeConfig): AerospikeConfig = {
+    newConfig(conf.getAll)
   }
 
   def newConfig(props: Map[String, Any] = Map.empty): AerospikeConfig = {
@@ -191,7 +218,7 @@ object AerospikeConfig {
       val ciProps = props.map(kv => kv.copy(_1 = kv._1.toLowerCase))
 
       ciProps.keys.filter(_.startsWith("aerospike.")).foreach { x =>
-        if(!defaultValues.contains(x))
+        if (!defaultValues.contains(x))
           sys.error(s"Unknown Aerospike specific option : $x")
       }
       val mergedProperties = defaultValues.toMap ++ ciProps
