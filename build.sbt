@@ -1,6 +1,6 @@
 organization := "com.aerospike"
 name         := "aerospike-spark"
-version      := "1.0." + sys.env.getOrElse("BUILD_NUMBER", "0-SNAPSHOT")
+version      := "1.0." + sys.env.getOrElse("build.number", "0-SNAPSHOT")
 
 crossScalaVersions := Seq("2.10.6", "2.11.12", "2.12.0")
 
