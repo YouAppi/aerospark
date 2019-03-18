@@ -1,10 +1,10 @@
 organization := "com.aerospike"
 name         := "aerospike-spark"
-version      := "1.0.1"
+version      := "1.0." + sys.env.getOrElse("BUILD_NUMBER", "0-SNAPSHOT")
 
-crossScalaVersions := Seq("2.10.6", "2.11.8", "2.12.0")
+crossScalaVersions := Seq("2.10.6", "2.11.12", "2.12.0")
 
-scalaVersion := "2.11.8"
+scalaVersion := "2.11.12"
 
 javacOptions ++= Seq("-source", "1.8", "-target", "1.8")
 
