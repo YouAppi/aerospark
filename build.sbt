@@ -1,6 +1,13 @@
 organization := "com.aerospike"
 name         := "aerospike-spark"
-version      := "1.0." + sys.env.getOrElse("build.number", "0-SNAPSHOT")
+version      := "1.0." + util.Properties.propOrElse("buildNumber", "0-SNAPSHOT")
+
+credentials += Credentials("Sonatype Nexus Repository Manager", "buildint.youappi.com", "ya_deploy", util.Properties.propOrEmpty("ya_deployer"))
+
+publishTo := {
+  val nexus = "https://buildint.youappi.com:8082/"
+  Some("maven-releases"  at nexus + "nexus/repository/maven-releases/")
+}
 
 crossScalaVersions := Seq("2.10.6", "2.11.12", "2.12.0")
 
