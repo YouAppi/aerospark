@@ -1,4 +1,4 @@
-organization := "com.aerospike"
+organization := "youappi"
 name         := "aerospike-spark"
 version      := "1.0." + util.Properties.propOrElse("buildNumber", "0-SNAPSHOT")
 
